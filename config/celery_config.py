@@ -1,19 +1,27 @@
-import os
+from __future__ import annotations
 
-# Network configuration
-REDIS_HOST = os.getenv("REDIS_HOST", "redis")
-CELERY_BROKER_URL = f"redis://{REDIS_HOST}:6379/0"
-CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:6379/0"
+from celery import Celery
 
-# Production task settings
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_SERIALIZER = "json"
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TIMEZONE = "UTC"
-CELERY_ENABLE_UTC = True
+from config.settings import settings
 
-# Throttling third-party APIs to prevent rate limits
-CELERY_ANNOTATIONS = {
-    "tasks.email_tasks.send_transactional_email": {"rate_limit": "50/m"},
-    "tasks.sms_tasks.send_sms_notification": {"rate_limit": "20/m"},
-}
+celery_app = Celery(
+    "notification_dispatcher",
+    broker=settings.redis_url,
+    backend=settings.redis_url,
+    include=[
+        "tasks.email_tasks",
+        "tasks.sms_tasks",
+    ],
+)
+
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    worker_prefetch_multiplier=1,
+    broker_connection_retry_on_startup=True,
+)
